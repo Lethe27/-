@@ -1,0 +1,119 @@
+#define GLUT_DISABLE_ATEXIT_HACK
+#include <stdlib.h>
+#include <time.h>
+#include <GL/glut.h>
+
+GLint nNumPoints = 4;
+GLint x1 = -4, x2 = -1, x3 = -1, x4 = 4,
+y1 = -4, y2 = 1, y3 = -1, y4 = 4,
+z1 = 0, z2 = 0, z3 = 0, z4 = 0;
+//4个控制点的3D坐标——z坐标全为0
+GLfloat ctrlPoints[4][3] = {
+	{ x1, y1, z1 },{ x2, y2, z2 },{ x3, y3, z3 },{ x4, y4, z4 }
+};
+
+void init(void)
+{
+	//背景色
+	glClearColor(0.5, 0.5, 0.5, 1.0);
+	//建立一个一维求值器并启动求值器
+
+	glMap1f(GL_MAP1_VERTEX_3,	// 产生的数据类型
+		0.0f,			        // 参数最小值
+		100.0f,				// 参数最大值
+		3,              //控制点间的步幅（以GLfloat个数度量）
+		nNumPoints,			// 控制点数目
+		&ctrlPoints[0][0]);	         // 保存控制点的数组
+	glEnable(GL_MAP1_VERTEX_3);  //启动求值器
+
+	glShadeModel(GL_FLAT);
+
+	//反走样
+
+	glEnable(GL_BLEND);
+	glEnable(GL_LINE_SMOOTH);  //允许直线反走样
+	glHint(GL_LINE_SMOOTH_HINT, GL_FASTEST);  // Antialias the lines
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+}
+
+void display(void)
+{
+	int i;
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glLoadIdentity();
+	glColor3f(1.0, 1.0, 0.0);
+	//映射曲线，选择u并计算曲线上的点
+	glMapGrid1d(100, 0.0, 100.0);  //等分区间
+	glEvalMesh1(GL_LINE, 0, 100);  //用求值器计算曲线上点的值，并画图
+								   /* 显示控制点 */
+	glPointSize(5.0);
+	glBegin(GL_POINTS);
+	for (i = 0; i < 4; i++)
+		glVertex3fv(&ctrlPoints[i][0]);
+	glEnd();
+	glutSwapBuffers();
+}
+void vertexPoint(void) {
+	//ctrlPoints[1][0] += 0.1;
+	ctrlPoints[1][1] += 0.1;
+	//ctrlPoints[2][0] += 0.1;
+	ctrlPoints[2][1] -= 0.1;
+	if (ctrlPoints[1][0] >= 10 || ctrlPoints[1][1] >= 10) {
+		ctrlPoints[1][0] = x2;
+		ctrlPoints[1][1] = y2;
+		ctrlPoints[2][0] = x3;
+		ctrlPoints[2][1] = y3;
+	}
+	init();
+	display();
+
+}
+
+//3D空间中绘制2D效果，采用正交投影
+void reshape(GLsizei w, GLsizei h)
+{
+	glViewport(0, 0, w, h);
+
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	if (w <= h)
+		glOrtho(-5.0, 5.0, -5.0 * (GLfloat)h / (GLfloat)w, 5.0 * (GLfloat)h / (GLfloat)w, -5.0, 5.0);
+	else
+		glOrtho(-5.0 * (GLfloat)w / (GLfloat)h, 5.0 * (GLfloat)w / (GLfloat)h, -5.0, 5.0, -5.0, 5.0);
+
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+}
+
+void keyboard(unsigned char key, int x, int y)
+{
+	switch (key)
+	{
+	case 'x':
+	case 'X':
+	case 27:   //ESC键
+		exit(0);
+		break;
+	default:
+		break;
+	}
+}
+
+int main(int argc, char** argv)
+{
+	srand((unsigned int)time(0));
+	glutInit(&argc, argv);
+	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);//使用双缓存模式和深度缓存
+	glutInitWindowSize(800, 800);
+	glutInitWindowPosition(0, 0);
+	glutCreateWindow("2D Bezier曲线");
+	init();
+	glutDisplayFunc(display);
+	glutReshapeFunc(reshape);
+	glutKeyboardFunc(keyboard);
+	glutIdleFunc(vertexPoint);//设置空闲时调用的函数
+	glutMainLoop();
+	return 0;
+}
