@@ -1,0 +1,966 @@
+#include<windows.h>
+#include<stdio.h>
+#include<math.h>
+#include "Shader.h"
+#include<gl/glut.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <GL/glut.h>
+#include<GL/glaux.h>
+GLuint drawcube, drawsphere, drawteapot,drawCone;
+#pragma comment(lib, "legacy_stdio_definitions.lib")
+//行星
+using namespace std;
+bool bPersp = false;
+int year = 0, day = 0, marsYear = 0;
+int speed = 12;
+float light_angle = 0;
+bool bWire = false;
+float light_radius = 8.0;
+float center[3] = { 0, 0, 0 };
+int wHeight = 0;
+int wWidth = 0;
+int state = 1;
+float star[1000][3];
+static float a = 0.0;
+static GLdouble eye = 1.0;
+static GLfloat locate = 1.0;
+static int lflag = GL_TRUE, rflag = GL_TRUE;
+GLUquadricObj* g_text;
+
+GLfloat planes[] = { 1.0,0.0,0.0,0.0 };
+GLfloat planet[] = { 0.0,0.5,0.0,0.5 };
+
+GLuint texture[8];    //创建一个纹理空间
+AUX_RGBImageRec* LoadBMP(CHAR* Filename) //载入位图图像
+{
+    FILE* File = NULL;                             //文件句柄
+    if (!Filename)                                //确保文件名已提供
+    {
+        return NULL;
+    }
+    File = fopen(Filename, "r");                   //尝试打开文件
+    if (File)
+    {
+        fclose(File);                            //关闭文件
+        return auxDIBImageLoadA(Filename);       //载入位图并返回指针
+    }
+    return NULL;                              //如果载入失败，返回NULL
+}
+
+int LoadGLTextures()  //载入位图并转换成纹理
+{
+    int Status = FALSE;                         //状态指示器
+    AUX_RGBImageRec* TextureImage[8];         //创建纹理的存储空间
+    memset(TextureImage, 0, sizeof(void*) * 8);//初始化
+//载入位图，检查有无错误，如果位图没找到则退出
+    char* image[] = {
+        (char*)"D:\\桌面\\image\\wall.bmp",
+        (char*)"D:\\桌面\\image\\texture1.bmp",
+        (char*)"D:\\桌面\\image\\texture2.bmp",
+        (char*)"D:\\桌面\\image\\texture3.bmp",
+        (char*)"D:\\桌面\\image\\texture4.bmp",
+        (char*)"D:\\桌面\\image\\texture5.bmp",
+        (char*)"D:\\桌面\\image\\texture6.bmp",
+        (char*)"D:\\桌面\\image\\texture7.bmp",
+    };
+    for (int i = 0; i < 8; i++)
+    {
+        if (TextureImage[i] = LoadBMP(image[i]))
+        {
+            Status = TRUE;
+            glGenTextures(1, &texture[i]);
+            //使用来自位图数据生成的纹理
+            glBindTexture(GL_TEXTURE_2D, texture[i]);
+            //指定二维纹理
+            glTexImage2D(GL_TEXTURE_2D, 0, 3, TextureImage[i]->sizeX, TextureImage[i]->sizeY, 0, GL_RGB, GL_UNSIGNED_BYTE, TextureImage[i]->data);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        }
+        if (TextureImage[i])               //纹理是否存在
+        {
+            if (TextureImage[i]->data)     //纹理图像是否存在
+            {
+                free(TextureImage[i]->data);      //释放纹理图像占用的内存
+            }
+            free(TextureImage[i]);        //释放图像结构
+        }
+    }
+
+    return Status;                   //返回Status
+}
+
+void reshape(int w, int h)
+{
+    glViewport(0, 0, (GLsizei)w, (GLsizei)h);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(90, w / h, 0.5, 1000);  //透视效果
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    gluLookAt(80, 100, 160, 0, 0, 0, 0, 10, 0);//设置观察点
+}
+void init1() //初始化
+{
+    glClearColor(0.0, 0.0, 0.0, 0.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    //画出正方体显示列表
+    drawcube = glGenLists(1);
+    glNewList(drawcube, GL_COMPILE);
+    glutSolidCube(1);
+    glEndList();
+
+    //画出茶壶显示列表
+    drawteapot = glGenLists(1);
+    glNewList(drawteapot, GL_COMPILE);
+    glutSolidTeapot(1);
+    glEndList();
+
+
+    //设置普通灯光照0位置及参数；
+    GLfloat position0[] = { 30,5,30,1 };
+    GLfloat light0s[] = { 0.10,0.10,0.10,0.0 };
+    GLfloat light0d[] = { 0.6,0.7,0.7 };
+    GLfloat light0a[] = { 0.9,0.9,0.9 };
+
+    glLightfv(GL_LIGHT0, GL_POSITION, position0);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, light0s);
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, light0d);
+    glLightfv(GL_LIGHT0, GL_AMBIENT, light0a);
+
+    //设置探照灯光照1位置及参数
+    GLfloat position1[] = { -60,40,0,1 };
+    GLfloat light1s[] = { 1.0,1.0,1.0,1.0 };
+    GLfloat light1d[] = { 0.06,0.1,0.1 };
+    GLfloat light1a[] = { 0.91,0.99,0.96 };
+    GLfloat  direction[] = { 0,-60,0,1 };
+    glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, direction);
+    glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 30.0);
+    glLightfv(GL_LIGHT1, GL_POSITION, position1);
+    glLightfv(GL_LIGHT1, GL_SPECULAR, light1s);
+    glLightfv(GL_LIGHT1, GL_DIFFUSE, light1d);
+    glLightfv(GL_LIGHT1, GL_AMBIENT, light1a);
+
+    glEnable(GL_LIGHTING);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_LIGHT0);
+    glEnable(GL_LIGHT1);
+
+}
+void SpecialKeys(int key, int x, int y)  //按键功能
+{
+    if (key == GLUT_KEY_LEFT)
+    {
+        a += 1.0;
+        glutPostRedisplay();
+    }
+    if (key == GLUT_KEY_RIGHT)
+    {
+        a -= 1.0;
+        glutPostRedisplay();
+    }
+    if (key == GLUT_KEY_DOWN)
+    {
+        eye -= 0.05;
+        glutPostRedisplay();
+    }
+    if (key == GLUT_KEY_UP)
+    {
+        eye += 0.05;
+        glutPostRedisplay();
+    }
+    if (key == GLUT_KEY_F2)
+    {
+        locate += 5.0;
+        glutPostRedisplay();
+    }
+    if (key == GLUT_KEY_F4)
+    {
+        locate -= 5.0;
+        glutPostRedisplay();
+    }
+}
+void move() {
+    year = (year + 8) % 3600;
+    marsYear = (marsYear + 6) % 3600;
+    day = (day + 30) % 3600;
+}
+void draw()  //绘制
+{   
+    move();
+    if (lflag)
+        glEnable(GL_LIGHT0);
+    if (rflag)
+        glEnable(GL_LIGHT1);
+    //glClearColor(0.34, 0.95, 1, 0.0); //背景色
+    glClearColor(0.4, 0.4, 0.5, 0.0);
+    glColor4f(0.0, 0.0, 0.0, 0.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glPushMatrix();
+    glRotatef(a, 0.0, 1.0, 0.0);
+    glScaled(eye, eye, eye);
+    glTranslatef(0, locate, 0);
+    glPushMatrix();
+
+    //绘制地面；
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.5, 0.5, 0.6, 0.0);
+    glTranslatef(0, -20, 0);
+    glScalef(147.5, 1, 147.5);
+    glCallList(drawcube);
+    
+    glutWireCube(1);
+    //外地面
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.0, 90.0 / 255, 0.0, 0.5);
+    glTranslatef(0, -22, 0);
+    glScalef(350, 2, 350);
+    glCallList(drawcube);
+    glColor4f(0.0, 1.0, 0.0, 0.5);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //外下地面
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(210.0 / 255, 80.0 / 255, 30.0 / 255, 0.5);
+    glTranslatef(0, -48, 0);
+    glScalef(350, 50, 350);
+    glCallList(drawcube);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    /*******以下为NCU字母*******/
+    //N字母
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(100.0 / 255, 0.0, 0.0, 0.0);
+    glRotatef(30.0, 1, 0, 0);
+    glRotatef(30.0, 0.0f, 1.0f, 0.0f);
+    glTranslatef(-152, 95, -200);
+    glScalef(10, 120, 10);
+    glCallList(drawcube);
+   
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(100.0 / 255, 0.0, 0.0, 0.0);
+    glTranslatef(-228, 132, -5);
+    glScalef(10, 110, 10);
+    glCallList(drawcube);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(100.0 / 255, 0.0, 0.0, 0.0);
+    glTranslatef(-230, 132, -70);
+    glScalef(10, 110, 10);
+    glCallList(drawcube);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //P字母
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.0, 100.0 / 255, 0.0, 0.0);
+    glTranslatef(-230, 132, -100);
+    glScalef(10, 110, 10);
+    glCallList(drawcube);
+    
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.0, 100.0 / 255, 0.0, 0.0);
+    glTranslatef(-230, 80, -132.5);
+    glScalef(10, 10, 60);
+    glCallList(drawcube);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.0, 100.0 / 255, 0.0, 0.0);
+    glTranslatef(-230, 182, -132.5);
+    glScalef(10, 10, 60);
+    glCallList(drawcube);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //u字母
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.0, 0.0, 100.0 / 255, 0.0);
+    glTranslatef(-230, 132, -190);
+    glScalef(10, 110, 10);
+    glCallList(drawcube);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.0, 0.0, 100.0 / 255, 0.0);
+    glTranslatef(-230, 80, -222.5);
+    glScalef(10, 10, 70);
+    glCallList(drawcube);  
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.0, 0.0, 100.0 / 255, 0.0);
+    glTranslatef(-230, 132, -255);
+    glScalef(10, 110, 10);
+    glCallList(drawcube);  
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+    
+
+
+    //墙1
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT,GL_AMBIENT);
+    glColor4f(0.35, 0.35, 0.35, 0.0);
+    glTranslatef(75, 0, 0);
+    glScalef(2, 150, 150);
+    glCallList(drawcube);
+    glColor4f(0.5, 0.5, 0.5, 0.0);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //墙2
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.35, 0.35, 0.35, 0.0);
+    glTranslatef(-75, 0, 0);
+    glScalef(2, 150, 150);
+    glCallList(drawcube);
+    glColor4f(0.5, 0.5, 0.5, 0.0);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //墙3
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.35, 0.35, 0.35, 0.0);
+    glTranslatef(0, 0, -75);
+    glScalef(150, 150, 2);
+    glCallList(drawcube);
+    glColor4f(0.5, 0.5, 0.5, 0.0);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //墙4
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.35, 0.35, 0.35, 0.0);
+    glTranslatef(-45, 0, 75);
+    glScalef(60, 150, 2);
+    glCallList(drawcube);
+    glColor4f(0.5, 0.5, 0.5, 0.0);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //墙5
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.35, 0.35, 0.35, 0.0);
+    glTranslatef(45, 0, 75);
+    glScalef(60, 150, 2);
+    glCallList(drawcube);
+    glColor4f(0.5, 0.5, 0.5, 0.0);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //墙6
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.35, 0.35, 0.35, 0.0);
+    glTranslatef(0, 60, 75);
+    glScalef(30, 30, 2);
+    glCallList(drawcube);
+    glColor4f(0.5, 0.5, 0.5, 0.0);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+    
+    //屋顶
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glTranslatef(0, 75, 0);
+    glColor4f(0.3, 0.3, 0.1, 0.0);
+    glScalef(160, 3, 160);
+    glCallList(drawcube);
+    glutWireCube(1);
+    // glFlush();
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //放置实心圆锥体
+    const double t = glutGet(GLUT_ELAPSED_TIME) / 1000.0;
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glTranslated(0, 75, 0);
+    glScalef(120, 60, 120);
+    glColor4f(0.3, 0.3, 0.1,0.0);
+    glRotated(-90, 1, 0, 0);
+    //glRotated(a, 0, 0,1);
+    glutSolidCone(1, 1, 16, 16);
+    glPopMatrix();
+
+    //门
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(210.0 / 255, 105.0 / 255, 30.0 / 255, 0.0);
+    glTranslatef(15, 0, 85);
+    glScalef(2, 90, 20);
+    glCallList(drawcube);
+    
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //墙1线
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.30, 0.3, 0.3, 0.0);
+    glTranslatef(75, 0, -75);
+    glScalef(10, 150, 10);
+    glCallList(drawcube);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.30, 0.3, 0.3, 0.0);
+    glTranslatef(-75, 0, -75);
+    glScalef(10, 150, 10);
+    glCallList(drawcube);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.30, 0.3, 0.3, 0.0);
+    glTranslatef(75, 0, 75);
+    glScalef(10, 150, 10);
+    glCallList(drawcube);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.30, 0.3, 0.3, 0.0);
+    glTranslatef(-75, 0, 75);
+    glScalef(10, 150, 10);
+    glCallList(drawcube);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //树干
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(220.0 / 255, 115.0 / 255, 40.0 / 255, 1.0);
+    glTranslatef(-120, 0, 120);
+    glScalef(15, 140, 15);
+    glCallList(drawcube);
+    
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //白 枕头
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(1.0, 1.0, 1.0, 0.0);
+    glTranslatef(-50, -7, -68);
+    glScalef(32, 5, 5);
+    glCallList(drawcube);
+    
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //床
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.01, 0.0);
+    glTranslatef(-50, -15, -50);
+    glScalef(3, 10, 3);
+    glCallList(drawcube);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.01, 0.0);
+    glTranslatef(-55, -15, -70);
+    glScalef(3, 10, 3);
+    glCallList(drawcube);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.01, 0.0);
+    glTranslatef(-70, -15, -40);
+    glScalef(3, 10, 3);
+    glCallList(drawcube);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.01, 0.0);
+    glTranslatef(-55, -15, -40);
+    glScalef(3, 10, 3);
+    glCallList(drawcube);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();//床板
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.01, 0.0);
+    glTranslatef(-50, -10, -50);
+    glScalef(35, 5, 51);
+    glCallList(drawcube);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();//红 被子
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(1.0, 0.0, 0.0, 0.0);
+    glTranslatef(-50, -7, -44);
+    glScalef(28, 5, 40);
+    glCallList(drawcube);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //绘制四个桌腿：
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.01, 0.0);
+    glTranslatef(20, -10, -20);
+    glScalef(1, 20, 1);
+    glCallList(drawcube);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.01, 0.0);
+    glTranslatef(-20, -10, -20);
+    glScalef(1, 20, 1);
+    glCallList(drawcube);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.01, 0.0);
+    glTranslatef(-20, -10, 20);
+    glScalef(1, 20, 1);
+    glCallList(drawcube);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.01, 0.0);
+    glTranslatef(20, -10, 20);
+    glScalef(1, 20, 1);
+    glCallList(drawcube);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //画出桌面：
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.1, 0.0);
+    //glColor4f(0.0, 0.0, 0.0, 0.0);
+    glScalef(50, 1, 50);
+    glCallList(drawcube);
+    glutWireCube(1);
+    // glFlush();
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //绘制两边台阶；
+    glPushMatrix();//左边第一级台阶
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.1, 0.0);
+    glTranslatef(-32, -12, 0);
+    glScalef(10, 4, 50);
+    glCallList(drawcube);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();// 右边第一级台阶
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.6, 0.40, 0.1, 0.0);
+    glTranslatef(32, -12, 0);
+    glScalef(10, 4, 50);
+    glCallList(drawcube);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+
+    glPushMatrix();//左边第二级台阶
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.1, 0.0);
+    glTranslatef(-34.5, -8, 0);
+    glScalef(5, 4, 50);
+    glCallList(drawcube);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();//右边第二级台阶
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.40, 0.1, 0.0);
+    glTranslatef(34.5, -8, 0);
+    glScalef(5, 4, 50);
+    glCallList(drawcube);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glutWireCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //桌面上摆放物品，茶壶
+    glPushMatrix();//茶壶
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.51, 0.05, 0.21, 0.0);
+    glTranslatef(0, 8, 0);
+    glScalef(5, 10, 5);
+    glCallList(drawteapot);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //地面上球体
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.30, 0.11, 0.15, 0.8);
+    glTranslatef(15, -13, 25);
+    glScalef(5, 5, 5);
+    glCallList(drawsphere);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();//圆环一个
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.90, 0.01, 0.95, 0.8);
+    glRotatef(1, 0, 0, 45);
+    glTranslatef(-60, -13, 60);
+    glutSolidTorus(1, 6, 20, 20);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //glEnable(GL_BLEND);
+    //glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+    GLUquadricObj* pObj;
+    glPushMatrix();//第一个杯子  左边
+    pObj = gluNewQuadric();
+    gluQuadricNormals(pObj, GLU_SMOOTH);
+    glTranslatef(-8, 6, -8);
+    glRotatef(90, 1, 0, 0);
+    gluCylinder(pObj, 1.50f, 1.0f, 5.0f, 26, 13);
+    glPopMatrix();
+
+    glPushMatrix();  //第2个杯子 右边
+    glTranslatef(8, 6, 8);
+    glRotatef(90, 1, 0, 0);
+    gluCylinder(pObj, 1.50f, 1.0f, 5.0f, 26, 13);
+    glPopMatrix();
+    glPushMatrix();  //第3个杯子
+    glTranslatef(-8, 6, 8);
+    glRotatef(90, 1, 0, 0);
+    gluCylinder(pObj, 1.50f, 1.0f, 5.0f, 26, 13);
+    glPopMatrix();
+    glPushMatrix();  //第4个杯子
+    glTranslatef(8, 6, -8);
+    glRotatef(90, 1, 0, 0);
+    gluCylinder(pObj, 1.50f, 1.0f, 5.0f, 26, 13);
+    glPopMatrix();
+    glPushMatrix();  //桌面上垫圈
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.21, 0.21, 0.21, 0.0);
+
+    pObj = gluNewQuadric();
+    //gluQuadricDrawStyle(pObj3,GLU_LINE);
+    glTranslatef(-8, 1, -8);
+    glRotatef(90, 1, 0, 0);
+    gluDisk(pObj, 0.50f, 3.0f, 10, 10);
+    glPopMatrix();
+
+    glPushMatrix();  //桌面上垫圈
+
+    pObj = gluNewQuadric();
+    glTranslatef(8, 1, 8);
+    glRotatef(90, 1, 0, 0);
+    gluDisk(pObj, 0.50f, 3.0f, 30, 30);
+    glPopMatrix();
+    glPushMatrix();  //桌面上垫圈
+
+    pObj = gluNewQuadric();
+    glTranslatef(-8, 1, 8);
+    glRotatef(90, 1, 0, 0);
+    gluDisk(pObj, 0.50f, 3.0f, 30, 30);
+    glPopMatrix();
+    glPushMatrix();  //桌面上垫圈
+
+    pObj = gluNewQuadric();
+    glTranslatef(8, 1, -8);
+    glRotatef(90, 1, 0, 0);
+    gluDisk(pObj, 0.50f, 3.0f, 30, 30);
+    glPopMatrix();
+    glPushMatrix(); //地面上放置 圆锥体；
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0.01, 0.01, 0.81, 0.0);
+    pObj = gluNewQuadric();
+    gluQuadricDrawStyle(pObj, GLU_LINE);
+    glTranslatef(-15.0, 5.0, 15);
+    glRotatef(90, 1, 0, 0);
+    gluCylinder(pObj, 0.0f, 2.0f, 5.0f, 26, 13);
+    glPopMatrix();
+       
+    glDisable(GL_TEXTURE_2D);//
+    glPopMatrix();//
+
+    glPushMatrix();//哑铃球
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor3f(0.0, 0.0, 0.0);
+    glTranslatef(-62.5, -15, 10);
+    glutSolidSphere(4.0, 12, 10);
+    glCallList(drawteapot);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+    glPushMatrix();//哑铃球
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor3f(0.0, 0.0, 0.0);
+    glTranslatef(-62.5, -15, 30);
+    glutSolidSphere(4.0, 12, 10);
+    glCallList(drawteapot);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //哑铃棍
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor4f(0, 0, 0, 1.0);
+    glTranslatef(-62.5, -15, 20);
+    glScalef(1.5, 1.5, 20);
+    glCallList(drawcube);
+    glColor4f(0.0, 1.0, 0.0, 0.0);
+    glutSolidCube(1);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();
+        glColor3f(1.0,1.0,0.0);//moon
+        glTranslatef(200,180,200);
+        glutSolidSphere(35.0,20,20);
+    glPopMatrix();
+    glPushMatrix();
+        glColor3f(0.0,90.0/255,0.0);//leaf
+        glTranslatef(-120,90,120);
+        glutSolidSphere(50.0,5,5);
+    glPopMatrix();
+    //月亮
+    glPushMatrix(); 
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor3f(1.0, 1.0, 0.0);//moon
+    glTranslatef(200, 180, 200);
+    glutSolidSphere(35.0, 20, 20);
+    glCallList(drawteapot);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    g_text = gluNewQuadric();
+
+    //太阳
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor3f(1.0, 0.2, 0.0);//moon
+    glTranslatef(200, 180, 200);
+    glutSolidSphere(50.0, 20, 20);
+    glCallList(drawteapot);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //地球
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor3f(0.0f, 0.0f, 1.0f);
+    glRotatef((GLfloat)year / 10, 0.0, 0.0, 1.0);
+    glTranslatef(500, 180,200);
+    glutSolidSphere(35.0, 20, 20);
+    glRotatef((GLfloat)day / 10, 0.0, 0.0, 1.0);
+    gluSphere(g_text, 0.25, 20, 16);
+    glColor3f(1.0f, 1.0f, 0.0f);
+    glRotatef((GLfloat)year / 10, 0.0f, 0.0f, 1.0f);
+    glRotatef(day / 30.0 * 360.0, 0.0f, 0.0f, 1.0f);
+    glTranslatef(0.3f, 0.0f, 0.0f);
+    gluSphere(g_text, 0.06, 20, 16);
+    glCallList(drawteapot);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    //火星
+    glPushMatrix();
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor3f(166.0 / 256, 119.0 / 356, 67.0 / 256);
+    glRotatef((GLfloat)marsYear / 10, 0.0, -1.0, 1.0);
+    glTranslatef(400, 180, 200);
+    glutSolidSphere(5.0, 10, 5);
+    glRotatef((GLfloat)day, 0.0, 0.0, 1.0);
+    //gluSphere(g_text, 0.23, 20, 16);
+    glCallList(drawteapot);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+
+    glPushMatrix();  //树叶
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT);
+    glColor3f(0.0, 90.0 / 255, 0.0);//leaf
+    glTranslatef(-120, 90, 120);
+    glutSolidSphere(50.0, 5, 5);
+    glCallList(drawteapot);
+    glDisable(GL_COLOR_MATERIAL);
+    glPopMatrix();
+   
+    //行星
+    //行星初始化
+    glBegin(GL_POINTS);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    for (int i = 0; i < 1000; ++i) {
+        glVertex3f(star[i][0], star[i][1], star[i][2]);
+    }
+    glEnd();
+    //绘制行星
+    glBegin(GL_POINTS);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    for (int i = 0; i < 1000; ++i) {
+        glVertex3f(star[i][0], star[i][1], star[i][2]);
+    }
+    glEnd();
+    glPopMatrix();
+    glutSwapBuffers();
+}
+void NormalKeysProc(unsigned char key, int x, int y) //退出按键
+{
+    if (key == 27) exit(0);
+}
+//绘制行星
+void init_stars()
+{
+    for (int i = 0; i < 1000; i++)
+        for (int j = 0; j < 3; j++)
+            star[i][j] = rand() % 20 - 10;
+}
+
+int main(int argc, char** argv)
+{
+   
+    MessageBox(NULL, "Pay attention:\nYou will visit a room provided for the aged\nThrough a simple operation, it can be observed from all angles\n\n***UP&DOWN:缩放\n***LEFT&RIGHT:旋转\n***F2&F4:升降", "提示", MB_OK);
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+    glutInitWindowSize(800, 600);
+    glutInitWindowPosition(100, 100);
+    glutCreateWindow("zh的养老破房");
+    init1();
+    glutDisplayFunc(draw);
+    glutReshapeFunc(reshape);
+    glutIdleFunc(draw);
+    glutKeyboardFunc(NormalKeysProc);
+    glutSpecialFunc(SpecialKeys);
+    glutMainLoop();
+    return 0;
+}
